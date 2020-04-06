@@ -1,18 +1,44 @@
 package main
 
 import (
+	"flag"
+	"html/template"
 	"log"
 	"net/http"
+	"path/filepath"
+	"sync"
 )
 
-func main() {
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`
-		
-		`))
+// templ is a singple template
+type templateHandler struct {
+	once     sync.Once
+	filename string
+	templ    *template.Template
+}
+
+// ServeHTTP handles the HTTP request
+// This is the syntax to create functions for types defined by us
+// This function satisfies the interface for the handler below
+func (t *templateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// This is the compilation step, done once. If needed again, the pointer
+	// to the compiled template will be used
+	t.once.Do(func() {
+		t.templ = template.Must(template.ParseFiles(filepath.Join("templates",
+			t.filename)))
 	})
-	//start the web server
-	if err := http.ListenAndServe(":8080", nil); err != nil {
+	t.templ.Execute(w, r)
+}
+
+func main() {
+	var addr = flag.String("addr", ":8080", "The addr of the application.")
+	flag.Parse()
+	r := newRoom()
+	http.Handle("/", &templateHandler{filename: "chat.html"})
+	http.Handle("/room", r)
+	// start the room
+	go r.run()
+	// start the server
+	if err := http.ListenAndServe(*addr, nil); err != nil {
 		log.Fatal("ListenAndServe:", err)
 	}
 }
